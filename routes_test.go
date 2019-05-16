@@ -1,56 +1,23 @@
 package main_test
 
 import (
-	. "./"
 	"context"
+	"errors"
+	"io/ioutil"
+	"net/http"
+	"strings"
+
+	. "./"
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"io/ioutil"
-	"net/http"
-	"net/http/httptest"
 )
 
-var config = OpenConfigFile("./test/config.json")
-
-type mockDb struct {
-	Payments []Payment
-}
-
-func (d mockDb) GetPayments(ctx context.Context, size int, after *string) (*[]PaymentSummary, error) {
-	summaries := make([]PaymentSummary, 0)
-	for _, v := range d.Payments {
-		summaries = append(summaries, PaymentSummary{
-			Id: v.Id,
-		})
-	}
-	return &summaries, nil
-}
-
-func (d mockDb) GetPaymentById(ctx context.Context, id string) (*Payment, error) {
-	for _, v := range d.Payments {
-		if v.Id == id {
-			return &v, nil
-		}
-	}
-	return nil, nil
-}
-
-func performRequest(ctx context.Context, method, path string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, path, nil)
-	w := httptest.NewRecorder()
-	RootRoute().ServeHTTP(w, req.WithContext(ctx))
-	return w
-}
 
 var _ = Describe("Routes", func() {
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, ContextConfig, config)
-	ctx = context.WithValue(ctx, ContextDb, mockDb{})
-
-	BeforeSuite(func() {
-		gin.SetMode(gin.TestMode)
-	})
+	var db Db = mockDb{}
+	ctx := context.WithValue(testCtx, ContextDb, db)
+	gin.SetMode(gin.TestMode)
 
 	Describe("V1", func() {
 		Describe("GET /", func() {
@@ -92,37 +59,37 @@ var _ = Describe("Routes", func() {
 				Expect(r).To(MatchJSON(`{"data": [], "links": {"self": "http://example.com/v1/payments/?count=20", "next": null}}`))
 			})
 			It("should list payments with updated after", func() {
-				w := performRequest(ctx, "GET", "/v1/payments/?count=20&after=1")
+				w := performRequest(ctx, "GET", "/v1/payments/?count=20&after=5cdd382e9549af35c3b94301")
 				Expect(w.Code).To(Equal(http.StatusOK))
 				r, _ := ioutil.ReadAll(w.Body)
-				Expect(r).To(MatchJSON(`{"data": [], "links": {"self": "http://example.com/v1/payments/?count=20&after=1", "next": null}}`))
+				Expect(r).To(MatchJSON(`{"data": [], "links": {"self": "http://example.com/v1/payments/?count=20&after=5cdd382e9549af35c3b94301", "next": null}}`))
 			})
 			It("should list payments from database", func() {
 				c := context.WithValue(ctx, ContextDb, mockDb{
 					Payments: []Payment{
-						{Id: "1"},
-					}})
+						{ID: *id},
+						}})
 				w := performRequest(c, "GET", "/v1/payments/?count=10")
 				Expect(w.Code).To(Equal(http.StatusOK))
 				r, _ := ioutil.ReadAll(w.Body)
 				Expect(r).To(MatchJSON(`{
 					"data": [
-						{"id": "1", "links": {"self": "http://example.com/v1/payments/1/"}}], 
+						{"id": "5cdd382e9549af35c3b94301", "links": {"self": "http://example.com/v1/payments/5cdd382e9549af35c3b94301/"}}], 
 					"links": {"self": "http://example.com/v1/payments/?count=10", "next": null}}`))
 			})
 			It("should have next link if there are too many items", func() {
 				c := context.WithValue(ctx, ContextDb, mockDb{
 					Payments: []Payment{
-						{Id: "a"},
-						{Id: "b"},
+						{ID: *id},
+						{ID: *id2},
 					}})
 				w := performRequest(c, "GET", "/v1/payments/?count=1")
 				Expect(w.Code).To(Equal(http.StatusOK))
 				r, _ := ioutil.ReadAll(w.Body)
 				Expect(r).To(MatchJSON(`{
 					"data": [
-						{"id": "a", "links": {"self": "http://example.com/v1/payments/a/"}}], 
-					"links": {"self": "http://example.com/v1/payments/?count=1", "next": "http://example.com/v1/payments/?count=1&after=a"}}`))
+						{"id": "5cdd382e9549af35c3b94301", "links": {"self": "http://example.com/v1/payments/5cdd382e9549af35c3b94301/"}}], 
+					"links": {"self": "http://example.com/v1/payments/?count=1", "next": "http://example.com/v1/payments/?count=1&after=5cdd382e9549af35c3b94301"}}`))
 			})
 		})
 
@@ -136,73 +103,15 @@ var _ = Describe("Routes", func() {
 			It("should payment resource when in database", func() {
 				c := context.WithValue(ctx, ContextDb, mockDb{
 					Payments: []Payment{
-						{
-							Id:             "4ee3a8d8-ca7b-4290-a52c-dd5b6165ec43",
-							Version:        0,
-							OrganisationId: "743d5b63-8e6f-432e-a8fa-c5d8d2ee5fcb",
-							Attributes: PaymentAttributes{
-								Amount: "100.21",
-								BeneficiaryParty: PaymentParty{
-									AccountName:       "W Owens",
-									AccountNumber:     "31926819",
-									AccountNumberCode: "BBAN",
-									AccountType:       0,
-									Address:           "1 The Beneficiary Localtown SE2",
-									BankId:            "403000",
-									BankIdCode:        "GBDSC",
-									Name:              "Wilfred Jeremiah Owens",
-								},
-								ChargesInformation: PaymentChargesInformation{
-									BearerCode: "SHAR",
-									SenderCharges: []PaymentSenderCharge{
-										{Amount: "5.00", Currency: "GBP"},
-										{Amount: "10.00", Currency: "USD"},
-									},
-									ReceiverChargesAmount:   "1.00",
-									ReceiverChargesCurrency: "USD",
-								},
-								Currency: "GBP",
-								DebtorParty: PaymentParty{
-									AccountName:       "EJ Brown Black",
-									AccountNumber:     "GB29XABC10161234567801",
-									AccountNumberCode: "IBAN",
-									AccountType:       0,
-									Address:           "10 Debtor Crescent Sourcetown NE1",
-									BankId:            "203301",
-									BankIdCode:        "GBDSC",
-									Name:              "Emelia Jane Brown",
-								},
-								EndToEndReference: "Wil piano Jan",
-								Fx: PaymentFx{
-									ContractReference: "FX123",
-									ExchangeRate:      "2.00000",
-									OriginalAmount:    "200.42",
-									OriginalCurrency:  "USD",
-								},
-								NumericReference:     "1002001",
-								PaymentId:            "123456789012345678",
-								PaymentPurpose:       "Paying for goods/services",
-								PaymentScheme:        "FPS",
-								PaymentType:          "Credit",
-								ProcessingDate:       "2017-01-18",
-								Reference:            "Payment for Em's piano lessons",
-								SchemePaymentSubType: "InternetBanking",
-								SchemePaymentType:    "ImmediatePayment",
-								SponsorParty: PaymentSponsorParty{
-									AccountNumber: "56781234",
-									BankId:        "123123",
-									BankIdCode:    "GBDSC",
-								},
-							},
-						},
+						paymentSample,
 					}})
-				w := performRequest(c, "GET", "/v1/payments/4ee3a8d8-ca7b-4290-a52c-dd5b6165ec43")
+				w := performRequest(c, "GET", "/v1/payments/5cdd382e9549af35c3b94301")
 				Expect(w.Code).To(Equal(http.StatusOK))
 				r, _ := ioutil.ReadAll(w.Body)
 				Expect(string(r)).To(MatchJSON(`
 				{
 					"type": "Payment",
-				  	"id": "4ee3a8d8-ca7b-4290-a52c-dd5b6165ec43",
+				  	"id": "5cdd382e9549af35c3b94301",
 				  	"version": 0,
 				  	"organisation_id": "743d5b63-8e6f-432e-a8fa-c5d8d2ee5fcb",
 					"attributes": {
@@ -265,9 +174,110 @@ var _ = Describe("Routes", func() {
 						  "bank_id_code": "GBDSC"
 						}
 					},
-					"links": {"self": "http://example.com/v1/payments/4ee3a8d8-ca7b-4290-a52c-dd5b6165ec43/"}
+					"links": {"self": "http://example.com/v1/payments/5cdd382e9549af35c3b94301/"}
 				}`))
 			})
 		})
+
+		Describe("PUT /v1/payments/{id}", func() {
+			It("should return 404 on not found payment", func() {
+				w := performRequest(ctx, "PUT", "/v1/payments/non-existing-id")
+				Expect(w.Code).To(Equal(http.StatusNotFound))
+				r, _ := ioutil.ReadAll(w.Body)
+				Expect(string(r)).To(ContainSubstring(http.StatusText(http.StatusNotFound)))
+			})
+			It("should return 400 on invalid body", func() {
+				c := context.WithValue(ctx, ContextDb, mockDb{
+					Payments: []Payment{
+						paymentSample,
+					}})
+				w := performRequestBody(c, "PUT", "/v1/payments/5cdd382e9549af35c3b94301", strings.NewReader("{"))
+				Expect(w.Code).To(Equal(http.StatusBadRequest))
+			})
+			It("should return 204 on success", func() {
+				c := context.WithValue(ctx, ContextDb, mockDb{
+					Payments: []Payment{
+						paymentSample,
+					}})
+				w := performRequestBody(c, "PUT", "/v1/payments/5cdd382e9549af35c3b94301", strings.NewReader("{}"))
+				Expect(w.Code).To(Equal(http.StatusNoContent))
+			})
+			It("should return 500 on internal server error", func() {
+				c := context.WithValue(ctx, ContextDb, mockDb{
+					error: errors.New("noooo"),
+					Payments: []Payment{
+						paymentSample,
+					}})
+				w := performRequestBody(c, "PUT", "/v1/payments/5cdd382e9549af35c3b94301", strings.NewReader("{}"))
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
+				r, _ := ioutil.ReadAll(w.Body)
+				Expect(string(r)).ToNot(ContainSubstring("noooo"))
+
+			})
+		})
+
+		Describe("DELETE /v1/payments/{id}", func() {
+			It("should return 404 on not found payment", func() {
+				w := performRequest(ctx, "DELETE", "/v1/payments/non-existing-id")
+				Expect(w.Code).To(Equal(http.StatusNotFound))
+				r, _ := ioutil.ReadAll(w.Body)
+				Expect(string(r)).To(ContainSubstring(http.StatusText(http.StatusNotFound)))
+			})
+			It("should return 204 on success", func() {
+				c := context.WithValue(ctx, ContextDb, mockDb{
+					Payments: []Payment{
+						paymentSample,
+					}})
+				w := performRequestBody(c, "DELETE", "/v1/payments/5cdd382e9549af35c3b94301", strings.NewReader("{}"))
+				Expect(w.Code).To(Equal(http.StatusNoContent))
+			})
+			It("should return 500 on internal server error", func() {
+				c := context.WithValue(ctx, ContextDb, mockDb{
+					error: errors.New("noooo"),
+					Payments: []Payment{
+						paymentSample,
+					}})
+				w := performRequestBody(c, "DELETE", "/v1/payments/5cdd382e9549af35c3b94301", strings.NewReader("{}"))
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
+				r, _ := ioutil.ReadAll(w.Body)
+				Expect(string(r)).ToNot(ContainSubstring("noooo"))
+
+			})
+		})
+		Describe("POST /v1/payments/", func() {
+			It("should return 400 on invalid body", func() {
+				c := context.WithValue(ctx, ContextDb, mockDb{
+					Payments: []Payment{
+						paymentSample,
+					}})
+				w := performRequestBody(c, "POST", "/v1/payments", strings.NewReader("{"))
+				Expect(w.Code).To(Equal(http.StatusBadRequest))
+			})
+			It("should return 200 on success", func() {
+				c := context.WithValue(ctx, ContextDb, mockDb{
+					Payments: []Payment{
+						paymentSample,
+					}})
+				w := performRequestBody(c, "POST", "/v1/payments", strings.NewReader("{}"))
+				Expect(w.Code).To(Equal(http.StatusCreated))
+				r, _ := ioutil.ReadAll(w.Body)
+				Expect(string(r)).To(MatchJSON(`
+				{ "id": "5cdd382e9549af35c3b94301", "links": {"self": "http://example.com/v1/payments/5cdd382e9549af35c3b94301/"} }
+				`))
+			})
+			It("should return 500 on internal server error", func() {
+				c := context.WithValue(ctx, ContextDb, mockDb{
+					error: errors.New("noooo"),
+					Payments: []Payment{
+						paymentSample,
+					}})
+				w := performRequestBody(c, "POST", "/v1/payments", strings.NewReader("{}"))
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
+				r, _ := ioutil.ReadAll(w.Body)
+				Expect(string(r)).ToNot(ContainSubstring("noooo"))
+
+			})
+		})
+
 	})
 })

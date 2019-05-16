@@ -7,9 +7,12 @@ import (
 	"github.com/google/logger"
 )
 
+// Config Shared configration format
 type Config struct {
-	Port int    `json:"port"`
-	Host string `json:"host"`
+	Port            int    `json:"port"`
+	Host            string `json:"host"`
+	MongoDbURI      string `json:"mongo_db_uri"`
+	MongoDbDatabase string `json:"mongo_db_database"`
 }
 
 var defaultConfig = Config{
@@ -17,6 +20,7 @@ var defaultConfig = Config{
 	Host: "http://example.com",
 }
 
+// OpenConfigFile Open a configuration at the given path.
 func OpenConfigFile(path string) *Config {
 	file, err := os.Open(path)
 	c := defaultConfig
@@ -32,9 +36,4 @@ func OpenConfigFile(path string) *Config {
 		logger.Fatal("Failed to decode configuration file: ", err)
 	}
 	return &c
-}
-
-func OpenConfig() *Config {
-	path := "./config/config.json"
-	return OpenConfigFile(path)
 }
