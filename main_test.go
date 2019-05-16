@@ -7,8 +7,13 @@ import (
 	"net/http/httptest"
 )
 
-var testConfig = OpenConfigFile("./test/config.json")
-var testCtx = context.WithValue(context.Background(), ContextConfig, testConfig)
+var testConfig = Config{
+	MongoDbURI:      "mongodb://localhost",
+	MongoDbDatabase: "test",
+	Host:            "http://example.com",
+	Port:            8080,
+}
+var testCtx = context.WithValue(context.Background(), ContextConfig, &testConfig)
 
 var id, _ = StringToID("5cdd382e9549af35c3b94301")
 var id2, _ = StringToID("5cdd382e9549af35c3b94302")

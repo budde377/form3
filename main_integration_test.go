@@ -13,7 +13,7 @@ type TestDb interface {
 	Drop(ctx context.Context) error
 }
 
-var db, _ = NewDb(testConfig)
+var db, _ = NewDb(&testConfig)
 
 var _ = BeforeSuite(func() {
 	_ = db.Connect(testCtx)
@@ -25,10 +25,9 @@ var _ = AfterSuite(func() {
 
 var testDbCtx = context.WithValue(testCtx, ContextDb, db)
 
-
 func populateDatabase(n int) []ID {
 	var ids = make([]ID, n)
-	for i := 0; i < n; i ++ {
+	for i := 0; i < n; i++ {
 		id, _ := db.CreatePayment(testCtx, paymentSample.OrganisationID, paymentSample.Attributes)
 		ids[i] = *id
 	}

@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-
+	"github.com/google/logger"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -147,7 +147,7 @@ func (db *db) UpdatePayment(ctx context.Context, id ID, organisationID string, a
 			"organisation_id": organisationID,
 			"attributes":      attributes,
 		},
-		"$inc": bson.M{"version": 1 },
+		"$inc": bson.M{"version": 1},
 	})
 	return err
 }
@@ -166,7 +166,7 @@ func (db *db) CreatePayment(ctx context.Context, organizationID string, attribut
 		},
 	)
 	if err != nil {
-		return nil, err
+		logger.Fatal(err)
 	}
 	str := res.InsertedID.(primitive.ObjectID)
 	return &str, nil
@@ -197,7 +197,7 @@ func (db *db) GetPayments(ctx context.Context, size int, after *ID) (*[]PaymentS
 	}
 	cur, err := db.paymentsCollection(ctx).Find(ctx, filter, &opts)
 	if err != nil {
-		return nil, err
+		logger.Fatal(err)
 	}
 	defer cur.Close(ctx)
 	var res []PaymentSummary
@@ -222,17 +222,11 @@ func (db *db) GetPaymentByID(ctx context.Context, id ID) (*Payment, error) {
 	if err == mongo.ErrNoDocuments {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
 	return &payment, nil
 }
 
 // NewDb constructs a new Db wrapper
 func NewDb(config *Config) (Db, error) {
 	client, err := mongo.NewClient(options.Client().ApplyURI(config.MongoDbURI))
-	if err != nil {
-		return nil, err
-	}
 	return &db{Client: client}, err
 }

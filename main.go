@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/go-chi/chi/middleware"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/google/logger"
@@ -23,12 +25,22 @@ const (
 
 func main() {
 	defer logger.Init("Form3 API", true, false, ioutil.Discard).Close()
-	c := OpenConfigFile("./config/config.json")
+	c := ReadConfigFromEnv()
 	db, err := NewDb(c)
 	if err != nil {
 		logger.Fatal("failed to initialize database: ", err)
 	}
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	err = db.Connect(ctx)
+	if err != nil {
+		logger.Fatal("failed to connect with database: ", err)
+	}
+	defer db.Close(context.Background())
 	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := context.WithValue(r.Context(), ContextDb, db)

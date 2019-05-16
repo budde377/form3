@@ -1,13 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
-
-	"github.com/google/logger"
 )
 
-// Config Shared configration format
+// Config Shared configuration format
 type Config struct {
 	Port            int    `json:"port"`
 	Host            string `json:"host"`
@@ -15,25 +12,13 @@ type Config struct {
 	MongoDbDatabase string `json:"mongo_db_database"`
 }
 
-var defaultConfig = Config{
-	Port: 8080,
-	Host: "http://example.com",
-}
-
-// OpenConfigFile Open a configuration at the given path.
-func OpenConfigFile(path string) *Config {
-	file, err := os.Open(path)
-	c := defaultConfig
-	if err != nil {
-		logger.Warning("Failed to open config file: ", err)
-	}
-	if file != nil {
-		defer file.Close()
-	} else {
-		return &defaultConfig
-	}
-	if err := json.NewDecoder(file).Decode(&c); err != nil {
-		logger.Fatal("Failed to decode configuration file: ", err)
+// ReadConfigFromEnv Open a configuration at the given path.
+func ReadConfigFromEnv() *Config {
+	var c = Config{
+		Port:            SafeStringToInt(os.Getenv("PORT"), 8080),
+		Host:            os.Getenv("HOST"),
+		MongoDbDatabase: os.Getenv("MONGO_DB_DATABASE"),
+		MongoDbURI:      os.Getenv("MONGO_DB_URI"),
 	}
 	return &c
 }
